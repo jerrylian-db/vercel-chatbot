@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, access } from 'fs/promises';
 import { join } from 'path';
+import { constants } from 'fs';
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
@@ -52,8 +53,18 @@ export async function POST(request: Request) {
     try {
       const uploadDir = process.env.UPLOAD_PATH || './uploads';
       
-      // Ensure upload directory exists
-      await mkdir(uploadDir, { recursive: true });
+      // Check if upload directory exists before trying to create it
+      try {
+        await access(uploadDir, constants.F_OK);
+      } catch {
+        // Directory doesn't exist, try to create it
+        try {
+          await mkdir(uploadDir, { recursive: true });
+        } catch (mkdirError: any) {
+          console.error('Failed to create upload directory:', mkdirError);
+          return NextResponse.json({ error: 'Upload directory not accessible' }, { status: 500 });
+        }
+      }
       
       const filePath = join(uploadDir, filename);
       await writeFile(filePath, Buffer.from(fileBuffer));
