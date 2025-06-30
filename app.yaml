@@ -1,0 +1,5 @@
+env:
+  - name: "OPENAI_SERVING_ENDPOINT"
+    valueFrom: "openai-serving-endpoint"
+  - name: "UPLOAD_PATH"
+    valueFrom: "chat-files-volume"
