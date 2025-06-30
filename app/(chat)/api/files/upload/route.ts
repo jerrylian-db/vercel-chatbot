@@ -53,17 +53,15 @@ export async function POST(request: Request) {
     try {
       const uploadDir = process.env.UPLOAD_PATH || './uploads';
       
-      // Check if upload directory exists before trying to create it
+      // Check if upload directory exists and is writable
       try {
-        await access(uploadDir, constants.F_OK);
+        await access(uploadDir, constants.F_OK | constants.W_OK);
       } catch {
-        // Directory doesn't exist, try to create it
-        try {
-          await mkdir(uploadDir, { recursive: true });
-        } catch (mkdirError: any) {
-          console.error('Failed to create upload directory:', mkdirError);
-          return NextResponse.json({ error: 'Upload directory not accessible' }, { status: 500 });
-        }
+        // Directory doesn't exist or isn't writable
+        console.error(`Upload directory ${uploadDir} is not accessible or writable`);
+        return NextResponse.json({ 
+          error: `Upload directory ${uploadDir} is not accessible. Please ensure the directory exists and has proper permissions.` 
+        }, { status: 500 });
       }
       
       const filePath = join(uploadDir, filename);
