@@ -91,24 +91,25 @@ export function sanitizeText(text: string) {
 }
 
 export function getUserFromHeaders(request: Request): string {
-  const forwardedUser = request.headers.get('X-Forwarded-User');
-  if (!forwardedUser) return 'anonymous';
+  // const forwardedUser = request.headers.get('X-Forwarded-User');
+  // if (!forwardedUser) return 'anonymous';
   
-  // Convert Databricks user ID to UUID format using deterministic hashing
-  if (forwardedUser.includes('@')) {
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(forwardedUser).digest('hex');
-    // Convert hash to UUID v4 format
-    return [
-      hash.substring(0, 8),
-      hash.substring(8, 12),
-      '4' + hash.substring(13, 16), // Version 4
-      ((parseInt(hash.substring(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.substring(17, 20), // Variant bits
-      hash.substring(20, 32)
-    ].join('-');
-  }
+  // // Convert Databricks user ID to UUID format using deterministic hashing
+  // if (forwardedUser.includes('@')) {
+  //   const crypto = require('crypto');
+  //   const hash = crypto.createHash('sha256').update(forwardedUser).digest('hex');
+  //   // Convert hash to UUID v4 format
+  //   return [
+  //     hash.substring(0, 8),
+  //     hash.substring(8, 12),
+  //     '4' + hash.substring(13, 16), // Version 4
+  //     ((parseInt(hash.substring(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.substring(17, 20), // Variant bits
+  //     hash.substring(20, 32)
+  //   ].join('-');
+  // }
   
-  return forwardedUser;
+  // return forwardedUser;
+  return 'anonymous';
 }
 
 async function getDatabricksOAuthToken(): Promise<string> {
