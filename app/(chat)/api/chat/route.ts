@@ -263,7 +263,7 @@ export async function POST(request: Request) {
     }
     
     console.error('Unexpected error:', error);
-    return new ChatSDKError('internal_server_error:api').toResponse();
+    return new ChatSDKError('bad_request:api').toResponse();
   }
 }
 

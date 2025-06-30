@@ -279,6 +279,7 @@ export async function voteMessage({
   type: 'up' | 'down';
 }) {
   try {
+    const db = await getDb();
     const [existingVote] = await db
       .select()
       .from(vote)
@@ -290,7 +291,6 @@ export async function voteMessage({
         .set({ isUpvoted: type === 'up' })
         .where(and(eq(vote.messageId, messageId), eq(vote.chatId, chatId)));
     }
-    const db = await getDb();
     return await db.insert(vote).values({
       chatId,
       messageId,

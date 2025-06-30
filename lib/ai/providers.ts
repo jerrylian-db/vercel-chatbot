@@ -91,8 +91,5 @@ export const myProvider = isTestEnvironment
         }),
         'title-model': provider(modelId),
         'artifact-model': provider(modelId),
-      },
-      imageModels: {
-        'small-model': provider(modelId),
-      },
+      }
     });
