@@ -89,3 +89,9 @@ export function getTrailingMessageId({
 export function sanitizeText(text: string) {
   return text.replace('<has_function_call>', '');
 }
+
+export function getUserFromHeaders(request: Request): string {
+  const forwardedUser = request.headers.get('X-Forwarded-User');
+  return forwardedUser || 'anonymous';
+}
+

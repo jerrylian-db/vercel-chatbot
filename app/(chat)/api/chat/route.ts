@@ -5,9 +5,9 @@ import {
   smoothStream,
   streamText,
 } from 'ai';
-import { auth, type UserType } from '@/app/(auth)/auth';
 import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
 import {
+  createGuestUser,
   createStreamId,
   deleteChatById,
   getChatById,
@@ -18,6 +18,7 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 import { generateUUID, getTrailingMessageId } from '@/lib/utils';
+import { getOrCreateUserId } from '@/lib/server-utils';
 import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
@@ -25,7 +26,6 @@ import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
-import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
 import {
@@ -67,7 +67,8 @@ export async function POST(request: Request) {
   try {
     const json = await request.json();
     requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+  } catch (error) {
+    console.error('Request body validation failed:', error);
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
@@ -75,22 +76,7 @@ export async function POST(request: Request) {
     const { id, message, selectedChatModel, selectedVisibilityType } =
       requestBody;
 
-    const session = await auth();
-
-    if (!session?.user) {
-      return new ChatSDKError('unauthorized:chat').toResponse();
-    }
-
-    const userType: UserType = session.user.type;
-
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
-    });
-
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
-      return new ChatSDKError('rate_limit:chat').toResponse();
-    }
+    const userId = await getOrCreateUserId(request);
 
     const chat = await getChatById({ id });
 
@@ -101,22 +87,58 @@ export async function POST(request: Request) {
 
       await saveChat({
         id,
-        userId: session.user.id,
+        userId: userId,
         title,
         visibility: selectedVisibilityType,
       });
     } else {
-      if (chat.userId !== session.user.id) {
+      if (chat.userId !== userId) {
         return new ChatSDKError('forbidden:chat').toResponse();
       }
     }
 
     const previousMessages = await getMessagesByChatId({ id });
 
+    // Convert local file URLs to base64 for local development
+    const processedMessage = {
+      ...message,
+      experimental_attachments: await Promise.all(
+        message.experimental_attachments?.map(async attachment => {
+          if (attachment.url.startsWith('/uploads/') || attachment.url.includes('/uploads/')) {
+            try {
+              // Read file and convert to base64 for local development
+              const { readFile } = await import('fs/promises');
+              const { join } = await import('path');
+              
+              const uploadDir = process.env.UPLOAD_PATH || './uploads';
+              // Extract filename from URL (handle both relative and absolute URLs)
+              const filename = attachment.url.split('/uploads/')[1];
+              const filePath = join(uploadDir, filename);
+              
+              const fileBuffer = await readFile(filePath);
+              const base64 = fileBuffer.toString('base64');
+              const dataUrl = `data:${attachment.contentType};base64,${base64}`;
+              
+              console.log('Converting attachment:', attachment.url, '-> data URL length:', dataUrl.length);
+              
+              return {
+                ...attachment,
+                url: dataUrl
+              };
+            } catch (error) {
+              console.error('Failed to convert file to base64:', error);
+              return attachment;
+            }
+          }
+          return attachment;
+        }) || []
+      )
+    };
+
     const messages = appendClientMessage({
       // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
       messages: previousMessages,
-      message,
+      message: processedMessage,
     });
 
     const { longitude, latitude, city, country } = geolocation(request);
@@ -146,6 +168,10 @@ export async function POST(request: Request) {
 
     const stream = createDataStream({
       execute: (dataStream) => {
+        console.log('Starting AI stream with model:', selectedChatModel);
+        console.log('Messages count:', messages.length);
+        console.log('Messages with attachments:', JSON.stringify(messages.filter(m => m.experimental_attachments?.length), null, 2));
+        
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel, requestHints }),
@@ -164,15 +190,16 @@ export async function POST(request: Request) {
           experimental_generateMessageId: generateUUID,
           tools: {
             getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
+            createDocument: createDocument({ userId: userId, dataStream }),
+            updateDocument: updateDocument({ userId: userId, dataStream }),
             requestSuggestions: requestSuggestions({
-              session,
+              userId: userId,
               dataStream,
             }),
           },
           onFinish: async ({ response }) => {
-            if (session.user?.id) {
+            console.log('AI stream finished, response messages:', response.messages.length);
+            if (userId) {
               try {
                 const assistantId = getTrailingMessageId({
                   messages: response.messages.filter(
@@ -202,8 +229,8 @@ export async function POST(request: Request) {
                     },
                   ],
                 });
-              } catch (_) {
-                console.error('Failed to save chat');
+              } catch (error) {
+                console.error('Failed to save chat:', error);
               }
             }
           },
@@ -219,7 +246,8 @@ export async function POST(request: Request) {
           sendReasoning: true,
         });
       },
-      onError: () => {
+      onError: (error) => {
+        console.error('DataStream error:', error);
         return 'Oops, an error occurred!';
       },
     });
@@ -237,6 +265,9 @@ export async function POST(request: Request) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
+    
+    console.error('Unexpected error:', error);
+    return new ChatSDKError('internal_server_error:api').toResponse();
   }
 }
 
@@ -255,11 +286,7 @@ export async function GET(request: Request) {
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
+  const userId = await getOrCreateUserId(request);
 
   let chat: Chat;
 
@@ -273,7 +300,7 @@ export async function GET(request: Request) {
     return new ChatSDKError('not_found:chat').toResponse();
   }
 
-  if (chat.visibility === 'private' && chat.userId !== session.user.id) {
+  if (chat.visibility === 'private' && chat.userId !== userId) {
     return new ChatSDKError('forbidden:chat').toResponse();
   }
 
@@ -343,15 +370,11 @@ export async function DELETE(request: Request) {
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
+  const userId = await getOrCreateUserId(request);
 
   const chat = await getChatById({ id });
 
-  if (chat.userId !== session.user.id) {
+  if (chat.userId !== userId) {
     return new ChatSDKError('forbidden:chat').toResponse();
   }
 

@@ -3,7 +3,7 @@ import {
   extractReasoningMiddleware,
   wrapLanguageModel,
 } from 'ai';
-import { xai } from '@ai-sdk/xai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { isTestEnvironment } from '../constants';
 import {
   artifactModel,
@@ -11,6 +11,12 @@ import {
   reasoningModel,
   titleModel,
 } from './models.test';
+
+const provider = createOpenAICompatible({
+  name: 'databricks',
+  apiKey: process.env.PROVIDER_API_KEY,
+  baseURL: 'https://e2-dogfood.staging.cloud.databricks.com/serving-endpoints',
+});
 
 export const myProvider = isTestEnvironment
   ? customProvider({
@@ -23,15 +29,15 @@ export const myProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': xai('grok-2-vision-1212'),
+        'chat-model': provider('ep-gpt4o-new'),
         'chat-model-reasoning': wrapLanguageModel({
-          model: xai('grok-3-mini-beta'),
+          model: provider('ep-gpt4o-new'),
           middleware: extractReasoningMiddleware({ tagName: 'think' }),
         }),
-        'title-model': xai('grok-2-1212'),
-        'artifact-model': xai('grok-2-1212'),
+        'title-model': provider('ep-gpt4o-new'),
+        'artifact-model': provider('ep-gpt4o-new'),
       },
       imageModels: {
-        'small-model': xai.image('grok-2-image'),
+        'small-model': provider('ep-gpt4o-new'),
       },
     });

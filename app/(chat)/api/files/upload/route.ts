@@ -1,8 +1,7 @@
-import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-
-import { auth } from '@/app/(auth)/auth';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
@@ -12,17 +11,12 @@ const FileSchema = z.object({
       message: 'File size should be less than 5MB',
     })
     // Update the file type based on the kind of files you want to accept
-    .refine((file) => ['image/jpeg', 'image/png'].includes(file.type), {
-      message: 'File type should be JPEG or PNG',
+    .refine((file) => ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.type), {
+      message: 'File type should be JPEG, PNG, GIF, or WebP',
     }),
 });
 
 export async function POST(request: Request) {
-  const session = await auth();
-
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   if (request.body === null) {
     return new Response('Request body is empty', { status: 400 });
@@ -43,23 +37,46 @@ export async function POST(request: Request) {
         .map((error) => error.message)
         .join(', ');
 
+      console.error('File validation failed:', errorMessage, 'File type:', file.type, 'File size:', file.size);
       return NextResponse.json({ error: errorMessage }, { status: 400 });
     }
 
     // Get filename from formData since Blob doesn't have name property
-    const filename = (formData.get('file') as File).name;
+    const originalFilename = (formData.get('file') as File).name;
+    // Sanitize filename to avoid issues with special characters
+    const filename = originalFilename.replace(/[^a-zA-Z0-9.-]/g, '_');
     const fileBuffer = await file.arrayBuffer();
+    
+    console.log('Processing file:', originalFilename, '-> sanitized:', filename);
 
     try {
-      const data = await put(`${filename}`, fileBuffer, {
-        access: 'public',
-      });
+      const uploadDir = process.env.UPLOAD_PATH || './uploads';
+      
+      // Ensure upload directory exists
+      await mkdir(uploadDir, { recursive: true });
+      
+      const filePath = join(uploadDir, filename);
+      await writeFile(filePath, Buffer.from(fileBuffer));
+
+      // Create absolute URL for the uploaded file
+      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const host = request.headers.get('host') || 'localhost:3000';
+      const baseUrl = `${protocol}://${host}`;
+      
+      const data = {
+        url: `${baseUrl}/uploads/${filename}`,
+        pathname: filename,
+        contentType: file.type,
+        size: file.size,
+      };
 
       return NextResponse.json(data);
     } catch (error) {
+      console.error('File write error:', error);
       return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
     }
   } catch (error) {
+    console.error('Request processing error:', error);
     return NextResponse.json(
       { error: 'Failed to process request' },
       { status: 500 },
