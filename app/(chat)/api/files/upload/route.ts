@@ -51,8 +51,8 @@ export async function POST(request: Request) {
     console.log('Processing file:', originalFilename, '-> sanitized:', filename);
 
     try {
-      const uploadDir = process.env.UPLOAD_PATH || './uploads';
-      
+      const uploadDir = './uploads';
+
       // Check if upload directory exists and is writable
       try {
         await access(uploadDir, constants.F_OK | constants.W_OK);
