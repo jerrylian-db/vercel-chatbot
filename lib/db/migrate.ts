@@ -2,12 +2,16 @@ import { config } from 'dotenv';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
+import { preprocessDatabaseEnvironment } from '../utils';
 
 config({
   path: '.env.local',
 });
 
 const runMigrate = async () => {
+  // Preprocess database environment to set POSTGRES_URL
+  await preprocessDatabaseEnvironment();
+
   if (!process.env.POSTGRES_URL) {
     throw new Error('POSTGRES_URL is not defined');
   }

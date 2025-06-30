@@ -23,7 +23,9 @@ const oauth2Client = new ClientCredentials({
     secret: process.env.DATABRICKS_CLIENT_SECRET!,
   },
   auth: {
-    tokenHost: process.env.DATABRICKS_HOST || 'https://e2-dogfood.staging.cloud.databricks.com',
+    tokenHost: process.env.DATABRICKS_HOST
+      ? `https://${process.env.DATABRICKS_HOST.replace(/^https?:\/\//, '')}`
+      : 'https://e2-dogfood.staging.cloud.databricks.com',
     tokenPath: '/oidc/v1/token',
   },
 });

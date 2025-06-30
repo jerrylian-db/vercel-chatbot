@@ -9,9 +9,13 @@ import {
   primaryKey,
   foreignKey,
   boolean,
+  pgSchema,
 } from 'drizzle-orm/pg-core';
 
-export const user = pgTable('User', {
+// Create schema reference
+const chatbotSchema = pgSchema(process.env.PGSCHEMA || 'chatbot');
+
+export const user = chatbotSchema.table('User', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   email: varchar('email', { length: 64 }).notNull(),
   password: varchar('password', { length: 64 }),
@@ -19,7 +23,7 @@ export const user = pgTable('User', {
 
 export type User = InferSelectModel<typeof user>;
 
-export const chat = pgTable('Chat', {
+export const chat = chatbotSchema.table('Chat', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   createdAt: timestamp('createdAt').notNull(),
   title: text('title').notNull(),
@@ -35,7 +39,7 @@ export type Chat = InferSelectModel<typeof chat>;
 
 // DEPRECATED: The following schema is deprecated and will be removed in the future.
 // Read the migration guide at https://chat-sdk.dev/docs/migration-guides/message-parts
-export const messageDeprecated = pgTable('Message', {
+export const messageDeprecated = chatbotSchema.table('Message', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   chatId: uuid('chatId')
     .notNull()
@@ -47,7 +51,7 @@ export const messageDeprecated = pgTable('Message', {
 
 export type MessageDeprecated = InferSelectModel<typeof messageDeprecated>;
 
-export const message = pgTable('Message_v2', {
+export const message = chatbotSchema.table('Message_v2', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   chatId: uuid('chatId')
     .notNull()
@@ -62,7 +66,7 @@ export type DBMessage = InferSelectModel<typeof message>;
 
 // DEPRECATED: The following schema is deprecated and will be removed in the future.
 // Read the migration guide at https://chat-sdk.dev/docs/migration-guides/message-parts
-export const voteDeprecated = pgTable(
+export const voteDeprecated = chatbotSchema.table(
   'Vote',
   {
     chatId: uuid('chatId')
@@ -82,7 +86,7 @@ export const voteDeprecated = pgTable(
 
 export type VoteDeprecated = InferSelectModel<typeof voteDeprecated>;
 
-export const vote = pgTable(
+export const vote = chatbotSchema.table(
   'Vote_v2',
   {
     chatId: uuid('chatId')
@@ -102,7 +106,7 @@ export const vote = pgTable(
 
 export type Vote = InferSelectModel<typeof vote>;
 
-export const document = pgTable(
+export const document = chatbotSchema.table(
   'Document',
   {
     id: uuid('id').notNull().defaultRandom(),
@@ -125,7 +129,7 @@ export const document = pgTable(
 
 export type Document = InferSelectModel<typeof document>;
 
-export const suggestion = pgTable(
+export const suggestion = chatbotSchema.table(
   'Suggestion',
   {
     id: uuid('id').notNull().defaultRandom(),
@@ -151,7 +155,7 @@ export const suggestion = pgTable(
 
 export type Suggestion = InferSelectModel<typeof suggestion>;
 
-export const stream = pgTable(
+export const stream = chatbotSchema.table(
   'Stream',
   {
     id: uuid('id').notNull().defaultRandom(),
